@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -143,15 +144,22 @@ func (h *AttachmentHandler) DownloadAttachment() http.HandlerFunc {
 
 		obj, err := h.minioSvc.GetObject(r.Context(), h.cfg.MinioBucket, att.StorageKey)
 		if err != nil {
-			helper.WriteError(w, apperr.New(apperr.CodeFileNotFoundOnDisk, "file not found on disk"))
+			writeAttachmentStorageError(w, err)
 			return
 		}
 		defer obj.Close()
+		reader := bufio.NewReader(obj)
+		if _, err := reader.Peek(1); err != nil && err != io.EOF {
+			writeAttachmentStorageError(w, err)
+			return
+		}
 
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": att.Filename}))
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Type", att.ContentType)
-		io.Copy(w, obj)
+		if _, err := io.Copy(w, reader); err != nil {
+			slog.WarnContext(r.Context(), "failed to stream attachment download", "error", err)
+		}
 	}
 }
 
@@ -176,7 +184,7 @@ func (h *AttachmentHandler) PreviewAttachment() http.HandlerFunc {
 
 		obj, err := h.minioSvc.GetObject(r.Context(), h.cfg.MinioBucket, att.StorageKey)
 		if err != nil {
-			helper.WriteError(w, apperr.New(apperr.CodeFileNotFoundOnDisk, "file not found on disk"))
+			writeAttachmentStorageError(w, err)
 			return
 		}
 		defer obj.Close()
@@ -191,7 +199,8 @@ func writeAttachmentPreview(w http.ResponseWriter, src io.Reader, filename strin
 	prefix := make([]byte, 512)
 	n, err := io.ReadFull(src, prefix)
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-		return err
+		writeAttachmentStorageError(w, err)
+		return nil
 	}
 	contentType := http.DetectContentType(prefix[:n])
 	disposition := "attachment"

@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"os"
@@ -23,6 +24,7 @@ type Config struct {
 	RabbitMQDSN      string
 	RabbitMQExchange string
 	UserSyncQueue    string
+	AppTimezone      *time.Location
 
 	// DB configuration
 	DBHost     string
@@ -41,6 +43,8 @@ type Config struct {
 
 	// Imgproxy configuration
 	ImgproxyBaseUrl string
+	ImgproxyKey     []byte
+	ImgproxySalt    []byte
 
 	// Symfony internal API for Kanban
 	SymfonyInternalApiUrl string
@@ -51,7 +55,7 @@ type Config struct {
 	Clock helper.Clock
 }
 
-func Load() *Config {
+func Load() (*Config, error) {
 	// Пытаемся загрузить локальный .env файл, если он есть
 	if err := godotenv.Load(); err != nil {
 		slog.Warn("Предупреждение: .env файл не найден, используются системные переменные окружения")
@@ -85,9 +89,31 @@ func Load() *Config {
 		SymfonyInternalApiKey: getEnv("SYMFONY_INTERNAL_API_KEY", ""),
 	}
 
+	timezone := getEnv("APP_TIMEZONE", "Europe/Moscow")
+	if timezone == "" {
+		timezone = "Europe/Moscow"
+	}
+	var err error
+	c.AppTimezone, err = time.LoadLocation(timezone)
+	if err != nil {
+		return nil, fmt.Errorf("invalid APP_TIMEZONE: %w", err)
+	}
+
+	key, salt := getEnv("IMGPROXY_KEY", ""), getEnv("IMGPROXY_SALT", "")
+	if key != "" && salt != "" {
+		c.ImgproxyKey, err = hex.DecodeString(key)
+		if err != nil {
+			return nil, fmt.Errorf("IMGPROXY_KEY must be a hex string")
+		}
+		c.ImgproxySalt, err = hex.DecodeString(salt)
+		if err != nil {
+			return nil, fmt.Errorf("IMGPROXY_SALT must be a hex string")
+		}
+	}
+
 	c.Clock = helper.NewClock()
 
-	return c
+	return c, nil
 }
 
 func getEnvAsBool(key string, fallback bool) bool {

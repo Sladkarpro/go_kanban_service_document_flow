@@ -108,7 +108,7 @@ func NewApp(cfg *config.Config, db *pgxpool.Pool) (*App, error) {
 	attachmentHandler := handler.NewAttachmentHandler(attachmentSvc, minioSvc, cfg)
 
 	cardSvc := service.NewCardService(cardRepo, permSvc, minioSvc, commentRepo, commentReadRepo, attachmentRepo, labelRepo, userRepo, columnRepo, boardRepo, projectMemberRepo, realtimePublisher, kanbanNotificationSvc, cfg)
-	cardHandler := handler.NewCardHandler(cardSvc)
+	cardHandler := handler.NewCardHandler(cardSvc, cfg.AppTimezone)
 
 	columnSvc := service.NewColumnService(columnRepo, permSvc, boardRepo)
 	columnHandler := handler.NewColumnHandler(columnSvc)
