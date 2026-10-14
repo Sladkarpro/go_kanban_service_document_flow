@@ -34,7 +34,7 @@ type AttachmentResponse struct {
 func MapAttachmentResponse(cfg *config.Config, a model.Attachment) *AttachmentResponse {
 	var previewUrl string
 	if strings.HasPrefix(a.ContentType, "image/") && cfg.ImgproxyBaseUrl != "" {
-		previewUrl = imgproxyURL(cfg, fmt.Sprintf("/rs:fit:400:400/plain/s3://%s/%s",
+		previewUrl = imgproxyURL(cfg, "rs:fit:400:400", fmt.Sprintf("s3://%s/%s",
 			cfg.MinioBucket,
 			a.StorageKey))
 	} else {
