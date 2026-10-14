@@ -185,7 +185,6 @@ func (s *ProjectService) GetProject(ctx context.Context, id int64) (*dto.Project
 		return nil, err
 	}
 
-	// Построить словарь для быстрого поиска
 	userMap := make(map[int64]model.User)
 	for _, u := range users {
 		userMap[u.ID] = u
@@ -193,7 +192,6 @@ func (s *ProjectService) GetProject(ctx context.Context, id int64) (*dto.Project
 
 	resp := dto.MapProjectResponse(p)
 
-	// Владелец
 	if owner, ok := userMap[p.OwnerID]; ok {
 		resp.Owner = &dto.UserResponse{
 			ID:         owner.ID,
@@ -204,15 +202,12 @@ func (s *ProjectService) GetProject(ctx context.Context, id int64) (*dto.Project
 		}
 	}
 
-	// Доски
 	resp.Boards = dto.MapBoardsResponse(boards)
 
-	// Участники
 	for _, m := range members {
 		memResp := &dto.MemberResponse{
 			UserID: m.UserID,
 			Role:   m.Role,
-			// TODO: RoleLabel
 		}
 		if u, ok := userMap[m.UserID]; ok {
 			memResp.Login = u.Login

@@ -901,7 +901,6 @@ func (r *CardRepository) MoveCard(ctx context.Context, id int64, columnID int64,
 
 // GetInvolvedUserIDsForNotifications returns distinct assignees + subtask users + card author.
 func (r *CardRepository) GetInvolvedUserIDsForNotifications(ctx context.Context, cardID int64) ([]int64, error) {
-	// Get direct assignees
 	assigneeMap, err := r.GetAssigneesByCardIDs(ctx, []int64{cardID})
 	if err != nil {
 		return nil, err

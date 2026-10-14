@@ -103,7 +103,6 @@ func (r *UserRepository) GetUsersByIDs(ctx context.Context, ids []int64) ([]mode
 
 	fetchedUsers, err := r.SymfonyClient.FetchUsersByIDs(ctx, missingIDs)
 	if err == nil && len(fetchedUsers) > 0 {
-		// Сохраняем в локальную БД
 		if err := r.UpsertUsers(ctx, fetchedUsers); err == nil {
 			users = append(users, fetchedUsers...)
 		}

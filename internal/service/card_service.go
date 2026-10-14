@@ -300,7 +300,6 @@ func (s *CardService) cardDetail(ctx context.Context, id int64, acc CardAccess) 
 		}
 	}
 
-	// Fetch Comments
 	comments, err := s.commentRepo.GetComments(ctx, id)
 	if err != nil {
 		return nil, nil, err
@@ -1045,7 +1044,6 @@ func (s *CardService) mutateMoveCard(ctx context.Context, id int64, columnID *in
 		})
 	}
 
-	// Notify on column change (moved)
 	if columnChanged && s.notificationSvc != nil {
 		actorID := derefInt64(currentUserID(ctx))
 		runDetached(ctx, notifyTimeout, "failed to notify kanban task moved", func(ctx context.Context) error {
@@ -1388,7 +1386,6 @@ func currentUserID(ctx context.Context) *int64 {
 	return &id
 }
 
-// filterOutActor removes the actor from the list of user IDs.
 func filterOutActor(ids []int64, actor *int64) []int64 {
 	if actor == nil {
 		return ids

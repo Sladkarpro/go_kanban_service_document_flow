@@ -154,7 +154,6 @@ func (s *CommentService) mutateCreateComment(ctx context.Context, cardID int64, 
 	})
 	s.publishCommentsCount(ctx, acc.BoardID, cardID)
 
-	// Comment notification (unified)
 	if s.notificationSvc != nil {
 		actorID := derefInt64(currentUserID(ctx))
 		runDetached(ctx, notifyTimeout, "failed to notify kanban comment added", func(ctx context.Context) error {

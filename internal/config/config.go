@@ -26,14 +26,12 @@ type Config struct {
 	UserSyncQueue    string
 	AppTimezone      *time.Location
 
-	// DB configuration
 	DBHost     string
 	DBPort     int
 	DBUser     string
 	DBPassword string
 	DBName     string
 
-	// MinIO configuration
 	MinioEndpoint        string
 	MinioAccessKeyID     string
 	MinioSecretAccessKey string
@@ -41,7 +39,6 @@ type Config struct {
 	MinioBucket          string
 	MinioUserBucket      string
 
-	// Imgproxy configuration
 	ImgproxyBaseUrl string
 	ImgproxyKey     []byte
 	ImgproxySalt    []byte
@@ -56,7 +53,6 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	// Пытаемся загрузить локальный .env файл, если он есть
 	if err := godotenv.Load(); err != nil {
 		slog.Warn("Предупреждение: .env файл не найден, используются системные переменные окружения")
 	}

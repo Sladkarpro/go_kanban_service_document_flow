@@ -188,13 +188,11 @@ func (s *BoardService) GetBoard(ctx context.Context, projectID int64, boardID in
 		return boardResp, nil
 	}
 
-	// Собрать ID всех карточек
 	cardIDs := make([]int64, len(cards))
 	for i, card := range cards {
 		cardIDs[i] = card.ID
 	}
 
-	// Bulk-запросы по всем card IDs
 	assigneesByCard, err := s.cardRepo.GetAssigneesByCardIDs(ctx, cardIDs)
 	if err != nil {
 		return nil, err
@@ -231,7 +229,6 @@ func (s *BoardService) GetBoard(ctx context.Context, projectID int64, boardID in
 		card := &cards[i]
 		cardResp := dto.MapCardResponse(card)
 
-		// Проставить labels из labelMap
 		for _, lID := range card.LabelIDs {
 			if l, ok := labelMap[lID]; ok {
 				cardResp.Labels = append(cardResp.Labels, l)
@@ -243,7 +240,6 @@ func (s *BoardService) GetBoard(ctx context.Context, projectID int64, boardID in
 			cardResp.ColumnTitle = title
 		}
 
-		// Проставить checklist counts
 		if checklist, ok := checklistsByCard[card.ID]; ok {
 			cardResp.ChecklistTotal = checklist.Total
 			cardResp.ChecklistDone = checklist.Done
@@ -267,7 +263,7 @@ func (s *BoardService) GetBoard(ctx context.Context, projectID int64, boardID in
 		allCards = append(allCards, cardResp)
 	}
 
-	// Bulk-загрузка пользователей assignees
+	// Загружаем исполнителей, авторов и пользователей, завершивших карточки.
 	if len(allUserIDs) > 0 {
 		users, err := s.userRepo.GetUsersByIDs(ctx, allUserIDs)
 		if err != nil {
