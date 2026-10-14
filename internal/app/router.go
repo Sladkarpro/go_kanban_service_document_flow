@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"go_kanban_service/internal/middleware"
@@ -16,6 +17,7 @@ func setupRouter(h Handlers, authMw *middleware.AuthMiddleware) *chi.Mux {
 	r.Use(middleware.RequestLogger())
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.Timeout(15 * time.Second))
+	r.Use(limitJSONBody(1 << 20))
 
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -106,4 +108,18 @@ func setupRouter(h Handlers, authMw *middleware.AuthMiddleware) *chi.Mux {
 	})
 
 	return r
+}
+
+// limitJSONBody ограничивает тело запроса 1 МБ для всех маршрутов, кроме загрузки
+// вложений: там свой предел 50 МБ (ParseMultipartForm в attachment_handler.go).
+// Без этого JSON-обработчики читают тело любого размера (KSEC-01).
+func limitJSONBody(max int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil && !strings.HasSuffix(strings.TrimRight(r.URL.Path, "/"), "/attachments") {
+				r.Body = http.MaxBytesReader(w, r.Body, max)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
