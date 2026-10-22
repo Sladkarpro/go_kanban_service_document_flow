@@ -12,15 +12,16 @@ type HistoryUserResponse struct {
 }
 
 type HistoryItemResponse struct {
-	ID        int64                `json:"id"`
+	ID          int64                `json:"id"`
 	Action      string               `json:"action"`
 	EntityTitle string               `json:"entityTitle"`
 	EntityLink  string               `json:"entityLink"`
 	Before      string               `json:"before,omitempty"`
-	After     string               `json:"after,omitempty"`
+	After       string               `json:"after,omitempty"`
 	IsChild     bool                 `json:"isChild,omitempty"`
-	CreatedAt string               `json:"createdAt"`
-	User      *HistoryUserResponse `json:"user"`
+	EntityID    int64                `json:"entityId,omitempty"`
+	CreatedAt   string               `json:"createdAt"`
+	User        *HistoryUserResponse `json:"user"`
 }
 
 type HistoryListResponse struct {
@@ -43,14 +44,15 @@ func MapHistoryList(items []model.HistoryListItem, hasMore bool, nextCursor int6
 	}
 	for _, item := range items {
 		row := HistoryItemResponse{
-			ID:        item.ID,
+			ID:          item.ID,
 			Action:      item.Action,
 			EntityTitle: item.EntityTitle,
 			EntityLink:  item.EntityLink,
-			Before:    clipHistory(item.Before),
-			After:     clipHistory(item.After),
-			IsChild:   item.IsChild,
-			CreatedAt: item.CreatedAt,
+			Before:      clipHistory(item.Before),
+			After:       clipHistory(item.After),
+			IsChild:     item.IsChild,
+			EntityID:    item.EntityID,
+			CreatedAt:   item.CreatedAt,
 		}
 		if item.UserID != nil {
 			row.User = &HistoryUserResponse{ID: *item.UserID, Name: item.UserName}

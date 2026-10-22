@@ -38,6 +38,8 @@ const (
 	CodeCommentBodyTooLong          ErrorCode = "comment_body_too_long"
 	CodeCommentLimitReached         ErrorCode = "comment_limit_reached"
 	CodeCommentNotFound             ErrorCode = "comment_not_found"
+	CodeTimeEntryNotFound           ErrorCode = "time_entry_not_found"
+	CodeTimeEntryAuthorOnly         ErrorCode = "time_entry_author_only"
 	CodeDescriptionInvalidType      ErrorCode = "description_invalid_type"
 	CodeFileNotFoundOnDisk          ErrorCode = "file_not_found_on_disk"
 	CodeFileNotProvided             ErrorCode = "file_not_provided"
@@ -113,6 +115,7 @@ func categoryCode(code ErrorCode) ErrorCode {
 		CodeCardNotFound,
 		CodeColumnNotFound,
 		CodeCommentNotFound,
+		CodeTimeEntryNotFound,
 		CodeFileNotFoundOnDisk,
 		CodeFolderNotFound,
 		CodeLabelNotFound,
@@ -123,6 +126,7 @@ func categoryCode(code ErrorCode) ErrorCode {
 		return CodeNotFound
 	case CodeAccessDenied,
 		CodeCommentAuthorOnly,
+		CodeTimeEntryAuthorOnly,
 		CodeInsufficientPermissions,
 		CodeProjectAccessDenied:
 		return CodeForbidden

@@ -202,6 +202,10 @@ func (s *BoardService) GetBoard(ctx context.Context, projectID int64, boardID in
 	if err != nil {
 		return nil, err
 	}
+	loggedByCard, err := s.cardRepo.SumLoggedMinutes(ctx, cardIDs)
+	if err != nil {
+		return nil, err
+	}
 
 	// Проставить assignees/labels на карточки из bulk-результатов
 	for i := range cards {
@@ -238,6 +242,7 @@ func (s *BoardService) GetBoard(ctx context.Context, projectID int64, boardID in
 
 		// Проставить comments count (comments + chat attachments)
 		cardResp.CommentsCount = commentCountsByCard[card.ID] + chatCountsByCard[card.ID]
+		cardResp.LoggedMinutes = loggedByCard[card.ID]
 
 		// Собрать user IDs для bulk-загрузки (assignees + creators)
 		for _, uid := range card.AssigneeIDs {

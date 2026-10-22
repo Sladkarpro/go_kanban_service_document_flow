@@ -34,24 +34,25 @@ type KanbanBoard struct {
 }
 
 type KanbanCard struct {
-	ID            int64              `json:"id"`
-	Title         string             `json:"title"`
-	Description   pgtype.Text        `json:"description"`
-	Position      float64            `json:"position"`
-	DueDate       pgtype.Timestamptz `json:"due_date"`
-	Priority      pgtype.Text        `json:"priority"`
-	IsArchived    bool               `json:"is_archived"`
-	ArchivedAt    pgtype.Timestamptz `json:"archived_at"`
-	ArchivedByID  pgtype.Int8        `json:"archived_by_id"`
-	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
-	CompletedByID pgtype.Int8        `json:"completed_by_id"`
-	ColumnID      pgtype.Int8        `json:"column_id"`
-	CreatedByID   pgtype.Int8        `json:"created_by_id"`
-	BorderColor   pgtype.Text        `json:"border_color"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
-	ParentID      pgtype.Int8        `json:"parent_id"`
+	ID              int64              `json:"id"`
+	Title           string             `json:"title"`
+	Description     pgtype.Text        `json:"description"`
+	Position        float64            `json:"position"`
+	DueDate         pgtype.Timestamptz `json:"due_date"`
+	Priority        pgtype.Text        `json:"priority"`
+	IsArchived      bool               `json:"is_archived"`
+	ArchivedAt      pgtype.Timestamptz `json:"archived_at"`
+	ArchivedByID    pgtype.Int8        `json:"archived_by_id"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	CompletedByID   pgtype.Int8        `json:"completed_by_id"`
+	ColumnID        pgtype.Int8        `json:"column_id"`
+	CreatedByID     pgtype.Int8        `json:"created_by_id"`
+	BorderColor     pgtype.Text        `json:"border_color"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	ParentID        pgtype.Int8        `json:"parent_id"`
+	EstimateMinutes pgtype.Int4        `json:"estimate_minutes"`
 }
 
 type KanbanCardAssignee struct {
@@ -79,6 +80,16 @@ type KanbanCardRead struct {
 	UserID        int64              `json:"user_id"`
 	UpToCommentID int64              `json:"up_to_comment_id"`
 	ReadAt        pgtype.Timestamptz `json:"read_at"`
+}
+
+type KanbanCardTimeWasting struct {
+	ID        int64              `json:"id"`
+	CardID    int64              `json:"card_id"`
+	UserID    int64              `json:"user_id"`
+	Minutes   int32              `json:"minutes"`
+	TrackedAt pgtype.Timestamptz `json:"tracked_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type KanbanColumn struct {

@@ -429,6 +429,12 @@ func (s *CardService) cardDetail(ctx context.Context, id int64, acc CardAccess) 
 		}
 	}
 
+	logged, err := s.repo.SumLoggedMinutes(ctx, []int64{id})
+	if err != nil {
+		return nil, nil, err
+	}
+	resp.LoggedMinutes = logged[id]
+
 	return resp, labels, nil
 }
 

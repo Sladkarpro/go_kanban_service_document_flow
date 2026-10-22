@@ -93,6 +93,12 @@ func setupRouter(h Handlers, authMw *middleware.AuthMiddleware) *chi.Mux {
 			r.Post("/{id}/move", h.Card.MoveCard())
 			r.Patch("/{id}/archive", h.Card.ArchiveCard())
 			r.Patch("/{id}/complete", h.Card.CompleteCard())
+			r.Patch("/{id}/estimate", h.Time.SetEstimate())
+
+			r.Route("/{cardId}/time-entries", func(r chi.Router) {
+				r.Post("/", h.Time.CreateEntry())
+				r.Delete("/{entryId}", h.Time.DeleteEntry())
+			})
 
 			// COMMENTS
 			r.Route("/{cardId}/comments", func(r chi.Router) {

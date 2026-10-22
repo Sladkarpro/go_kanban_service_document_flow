@@ -28,6 +28,11 @@ type CardRepositoryInterface interface {
 	GetLabelIDsByCardIDs(ctx context.Context, cardIDs []int64) (map[int64][]int64, error)
 	// GetCardRow — только строка карточки, без исполнителей и меток.
 	GetCardRow(ctx context.Context, id int64) (*model.Card, error)
+	SetCardEstimate(ctx context.Context, id int64, minutes *int) (*model.Card, error)
+	SumLoggedMinutes(ctx context.Context, cardIDs []int64) (map[int64]int, error)
+	CreateTimeEntry(ctx context.Context, cardID, userID int64, minutes int, workAt time.Time) (*model.TimeEntry, error)
+	GetTimeEntry(ctx context.Context, id int64) (*model.TimeEntry, error)
+	DeleteTimeEntry(ctx context.Context, id int64) error
 	// UpdateCardFields пишет только редактируемые поля и отдаёт строку после записи.
 	UpdateCardFields(ctx context.Context, c *model.Card) (*model.Card, error)
 	// SetCardArchived пишет только поля архива и отдаёт заголовок карточки.
@@ -447,6 +452,10 @@ func mapDBCard(c dbgen.KanbanCard) model.Card {
 	if c.CreatedByID.Valid {
 		v := c.CreatedByID.Int64
 		card.CreatedByID = &v
+	}
+	if c.EstimateMinutes.Valid {
+		v := int(c.EstimateMinutes.Int32)
+		card.EstimateMinutes = &v
 	}
 	return card
 }
@@ -919,4 +928,76 @@ func (r *CardRepository) GetInvolvedUserIDsForNotifications(ctx context.Context,
 		result = append(result, id)
 	}
 	return result, nil
+}
+
+func (r *CardRepository) SetCardEstimate(ctx context.Context, id int64, minutes *int) (*model.Card, error) {
+	params := dbgen.SetCardEstimateParams{ID: id}
+	if minutes != nil {
+		params.EstimateMinutes = pgtype.Int4{Int32: int32(*minutes), Valid: true}
+	}
+	row, err := dbgen.New(r.Db).SetCardEstimate(ctx, params)
+	if err != nil {
+		return nil, NormalizeError(err)
+	}
+	card := mapDBCard(row)
+	return &card, nil
+}
+
+func (r *CardRepository) SumLoggedMinutes(ctx context.Context, cardIDs []int64) (map[int64]int, error) {
+	out := make(map[int64]int)
+	if len(cardIDs) == 0 {
+		return out, nil
+	}
+	rows, err := dbgen.New(r.Db).SumLoggedMinutesByCardIDs(ctx, cardIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.CardID] = int(row.Minutes)
+	}
+	return out, nil
+}
+
+func mapTimeEntry(row dbgen.KanbanCardTimeWasting) model.TimeEntry {
+	return model.TimeEntry{
+		ID:        row.ID,
+		CardID:    row.CardID,
+		UserID:    row.UserID,
+		Minutes:   int(row.Minutes),
+		TrackedAt: row.TrackedAt.Time,
+	}
+}
+
+func (r *CardRepository) CreateTimeEntry(ctx context.Context, cardID, userID int64, minutes int, workAt time.Time) (*model.TimeEntry, error) {
+	row, err := dbgen.New(r.Db).CreateTimeEntry(ctx, dbgen.CreateTimeEntryParams{
+		CardID:    cardID,
+		UserID:    userID,
+		Minutes:   int32(minutes),
+		TrackedAt: pgtype.Timestamptz{Time: workAt, Valid: true},
+	})
+	if err != nil {
+		return nil, NormalizeError(err)
+	}
+	entry := mapTimeEntry(row)
+	return &entry, nil
+}
+
+func (r *CardRepository) GetTimeEntry(ctx context.Context, id int64) (*model.TimeEntry, error) {
+	row, err := dbgen.New(r.Db).GetTimeEntry(ctx, id)
+	if err != nil {
+		return nil, NormalizeError(err)
+	}
+	entry := mapTimeEntry(row)
+	return &entry, nil
+}
+
+func (r *CardRepository) DeleteTimeEntry(ctx context.Context, id int64) error {
+	n, err := dbgen.New(r.Db).SoftDeleteTimeEntry(ctx, id)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return apperr.ErrNotFound
+	}
+	return nil
 }

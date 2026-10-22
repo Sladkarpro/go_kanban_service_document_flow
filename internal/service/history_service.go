@@ -177,6 +177,10 @@ func (s *HistoryService) Undo(ctx context.Context, projectID int64) (string, str
 	return entry.Action, entry.EntityTitle, model.HistoryIsChild(entry.EntityType, entry.EntityID, entry.CardID), nil
 }
 
+func isTimeHistoryAction(action string) bool {
+	return action == "card.updated.estimate" || action == "time_entry.created" || action == "time_entry.deleted"
+}
+
 func isMembersHistoryAction(action string) bool {
 	return action == "members.replaced" || action == "member.role" || action == "member.removed"
 }
@@ -228,13 +232,22 @@ func (s *HistoryService) publishUndo(ctx context.Context, entry model.HistoryUnd
 		if err != nil {
 			return s.realtime.PublishCardDeleted(ctx, 0, cardID, realtimeSenderID(ctx))
 		}
-		return s.realtime.PublishCardPatch(ctx, card, map[string]any{
+		patch := map[string]any{
 			"id":         card.ID,
 			"title":      card.Title,
 			"position":   card.Position,
 			"columnId":   card.ColumnID,
 			"isArchived": card.IsArchived,
-		}, realtimeSenderID(ctx))
+		}
+		if isTimeHistoryAction(entry.Action) {
+			patch["estimateMinutes"] = card.EstimateMinutes
+			sums, err := s.cardRepo.SumLoggedMinutes(ctx, []int64{cardID})
+			if err != nil {
+				return err
+			}
+			patch["loggedMinutes"] = sums[cardID]
+		}
+		return s.realtime.PublishCardPatch(ctx, card, patch, realtimeSenderID(ctx))
 	})
 }
 
