@@ -43,6 +43,7 @@ type Handlers struct {
 	ProjectFolder *handler.ProjectFolderHandler
 	ProjectMember *handler.ProjectMemberHandler
 	History       *handler.HistoryHandler
+	Time          *handler.TimeHandler
 }
 
 func NewApp(cfg *config.Config, db *pgxpool.Pool) (*App, error) {
@@ -117,6 +118,9 @@ func NewApp(cfg *config.Config, db *pgxpool.Pool) (*App, error) {
 	commentSvc := service.NewCommentService(commentRepo, commentReadRepo, permSvc, userRepo, realtimePublisher, kanbanNotificationSvc)
 	commentHandler := handler.NewCommentHandler(commentSvc)
 
+	timeSvc := service.NewTimeService(cardRepo, permSvc, realtimePublisher)
+	timeHandler := handler.NewTimeHandler(timeSvc)
+
 	labelSvc := service.NewLabelService(labelRepo, permSvc, boardRepo, realtimePublisher)
 	labelHandler := handler.NewLabelHandler(labelSvc)
 
@@ -128,6 +132,7 @@ func NewApp(cfg *config.Config, db *pgxpool.Pool) (*App, error) {
 	columnSvc.History = historySvc
 	commentSvc.History = historySvc
 	labelSvc.History = historySvc
+	timeSvc.History = historySvc
 
 	projectFolderRepo := repository.NewProjectFolderRepository(db)
 	projectFolderSvc := service.NewProjectFolderService(projectFolderRepo, permSvc)
@@ -157,6 +162,7 @@ func NewApp(cfg *config.Config, db *pgxpool.Pool) (*App, error) {
 		ProjectFolder: projectFolderHandler,
 		ProjectMember: projectMemberHandler,
 		History:       historyHandler,
+		Time:          timeHandler,
 	}
 
 	r := setupRouter(h, authMw)

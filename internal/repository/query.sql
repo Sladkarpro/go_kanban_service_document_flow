@@ -195,9 +195,9 @@ WHERE col.id = $1 AND col.deleted_at IS NULL;
 -- остаются у оригинала; автор копии и её подзадач — тот, кто копирует.
 -- Первая строка — сама копия, дальше её подзадачи по порядку.
 WITH copy AS (
-    INSERT INTO kanban_card (title, description, position, due_date, priority, column_id, created_by_id, border_color)
+    INSERT INTO kanban_card (title, description, position, due_date, priority, column_id, created_by_id, border_color, estimate_minutes)
     SELECT title, description, sqlc.arg(position)::float8, due_date, priority,
-           sqlc.arg(column_id)::bigint, sqlc.narg(created_by_id)::bigint, border_color
+           sqlc.arg(column_id)::bigint, sqlc.narg(created_by_id)::bigint, border_color, estimate_minutes
     FROM kanban_card
     WHERE id = sqlc.arg(source_id)::bigint AND deleted_at IS NULL
     RETURNING *
@@ -729,6 +729,7 @@ SELECT
     j.id,
     j.project_id,
     j.user_id,
+    j.entity_id,
     j.action,
     j.entity_title,
     j.entity_link,
@@ -819,6 +820,37 @@ SELECT EXISTS(
         )
       )
 );
+
+-- name: SetCardEstimate :one
+UPDATE kanban_card
+SET estimate_minutes = $2, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING *;
+
+-- name: CreateTimeEntry :one
+INSERT INTO kanban_card_time_wasting (card_id, user_id, minutes, tracked_at)
+VALUES ($1, $2, $3, $4)
+RETURNING *;
+
+-- name: GetTimeEntry :one
+SELECT * FROM kanban_card_time_wasting
+WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: SoftDeleteTimeEntry :execrows
+UPDATE kanban_card_time_wasting
+SET deleted_at = NOW()
+WHERE id = $1 AND deleted_at IS NULL;
+
+-- name: RestoreTimeEntry :exec
+UPDATE kanban_card_time_wasting
+SET deleted_at = NULL
+WHERE id = $1;
+
+-- name: SumLoggedMinutesByCardIDs :many
+SELECT card_id, COALESCE(SUM(minutes), 0)::int AS minutes
+FROM kanban_card_time_wasting
+WHERE card_id = ANY($1::bigint[]) AND deleted_at IS NULL
+GROUP BY card_id;
 
 -- name: DeleteProjectHistoryEntry :exec
 DELETE FROM kanban_project_history

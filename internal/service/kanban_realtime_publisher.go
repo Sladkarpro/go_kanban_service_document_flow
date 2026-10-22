@@ -130,25 +130,27 @@ func (p *KanbanRealtimePublisher) PublishCardPatchByID(ctx context.Context, card
 
 func (p *KanbanRealtimePublisher) BuildCreatedCard(card *model.Card, column *model.Column) map[string]any {
 	created := map[string]any{
-		"id":             card.ID,
-		"borderColor":    card.BorderColor,
-		"title":          card.Title,
-		"description":    card.Description,
-		"position":       card.Position,
-		"priority":       card.Priority,
-		"dueDate":        formatRealtimeTime(card.DueDate),
-		"labels":         []map[string]any{},
-		"assignees":      []map[string]any{},
-		"checklistTotal": 0,
-		"checklistDone":  0,
-		"commentsCount":  0,
-		"updatedAt":      nil,
-		"completedAt":    formatRealtimeTime(card.CompletedAt),
-		"columnId":       column.ID,
-		"boardId":        column.BoardID,
-		"createdById":    card.CreatedByID,
-		"completedById":  card.CompletedByID,
-		"status":         strconv.FormatInt(column.ID, 10),
+		"id":              card.ID,
+		"borderColor":     card.BorderColor,
+		"title":           card.Title,
+		"description":     card.Description,
+		"position":        card.Position,
+		"priority":        card.Priority,
+		"dueDate":         formatRealtimeTime(card.DueDate),
+		"labels":          []map[string]any{},
+		"assignees":       []map[string]any{},
+		"checklistTotal":  0,
+		"checklistDone":   0,
+		"commentsCount":   0,
+		"estimateMinutes": card.EstimateMinutes,
+		"loggedMinutes":   0,
+		"updatedAt":       nil,
+		"completedAt":     formatRealtimeTime(card.CompletedAt),
+		"columnId":        column.ID,
+		"boardId":         column.BoardID,
+		"createdById":     card.CreatedByID,
+		"completedById":   card.CompletedByID,
+		"status":          strconv.FormatInt(column.ID, 10),
 	}
 
 	// Note: full createdBy object would require user lookup; included IDs for now.
@@ -172,6 +174,7 @@ func (p *KanbanRealtimePublisher) BuildRestoredCard(ctx context.Context, cardID,
 		func() (map[string]any, error) { return p.buildCardAssignees(ctx, card) },
 		func() (map[string]any, error) { return p.BuildChecklistCounters(ctx, cardID) },
 		func() (map[string]any, error) { return p.BuildCommentsCount(ctx, cardID) },
+		func() (map[string]any, error) { return p.buildLoggedMinutes(ctx, cardID) },
 	} {
 		patch, err := build()
 		if err != nil {
@@ -207,6 +210,14 @@ func (p *KanbanRealtimePublisher) BuildCommentsCount(ctx context.Context, cardID
 	return map[string]any{
 		"commentsCount": comments[cardID] + chat[cardID],
 	}, nil
+}
+
+func (p *KanbanRealtimePublisher) buildLoggedMinutes(ctx context.Context, cardID int64) (map[string]any, error) {
+	sums, err := p.cardRepo.SumLoggedMinutes(ctx, []int64{cardID})
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"loggedMinutes": sums[cardID]}, nil
 }
 
 // buildCardLabels — метки карточки для события по их id и известной доске.

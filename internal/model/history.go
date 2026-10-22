@@ -29,6 +29,7 @@ type HistoryListItem struct {
 	IsChild     bool
 	UserID      *int64
 	UserName    string
+	EntityID    int64
 	CreatedAt   string
 }
 
