@@ -24,6 +24,7 @@ func TestTaskListQueryOmitsInactiveFilters(t *testing.T) {
 	for _, unwanted := range []string{
 		"ILIKE", "kanban_card_assignee", "c.priority =", "c.created_by_id",
 		"c.due_date >=", "c.due_date <", "c.completed_at IS", "c.parent_id IS NOT NULL",
+		"kanban_card_time_wasting",
 	} {
 		if strings.Contains(sqlStr, unwanted) {
 			t.Errorf("пустой фильтр просочился в SQL: %q\n%s", unwanted, sqlStr)
@@ -85,6 +86,30 @@ func TestTaskListQueryDateRangesOnlyWhenSet(t *testing.T) {
 	}
 	if !strings.Contains(sqlStr, "END) < $4") {
 		t.Errorf("нет верхней границы archived_at:\n%s", sqlStr)
+	}
+	if len(args) != 4 || args[2] != from || args[3] != to {
+		t.Errorf("args = %v", args)
+	}
+}
+
+func TestTaskListQueryTrackedAtExists(t *testing.T) {
+	from := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC)
+
+	sqlStr, args := taskListSQL(t, TaskListParams{ViewerID: 7, TrackedFrom: &from})
+	if !strings.Contains(sqlStr, "EXISTS (SELECT 1 FROM kanban_card_time_wasting w WHERE w.card_id = c.id AND w.deleted_at IS NULL AND w.tracked_at >= $3)") {
+		t.Fatalf("нет нижней границы tracked_at:\n%s", sqlStr)
+	}
+	if strings.Contains(sqlStr, "w.tracked_at <") {
+		t.Errorf("верхняя граница tracked_at не задавалась:\n%s", sqlStr)
+	}
+	if len(args) != 3 || args[2] != from {
+		t.Errorf("args = %v", args)
+	}
+
+	sqlStr, args = taskListSQL(t, TaskListParams{ViewerID: 7, TrackedFrom: &from, TrackedTo: &to})
+	if !strings.Contains(sqlStr, "w.tracked_at >= $3") || !strings.Contains(sqlStr, "w.tracked_at < $4") {
+		t.Fatalf("нет обеих границ tracked_at:\n%s", sqlStr)
 	}
 	if len(args) != 4 || args[2] != from || args[3] != to {
 		t.Errorf("args = %v", args)

@@ -13,21 +13,23 @@ type TaskProjectRef struct {
 }
 
 type TaskListItem struct {
-	ID          int64           `json:"id"`
-	Title       string          `json:"title"`
-	Priority    *string         `json:"priority"`
-	DueDate     *time.Time      `json:"dueDate"`
-	BorderColor *string         `json:"borderColor"`
-	ParentID    *int64          `json:"parentId"`
-	ParentTitle *string         `json:"parentTitle"`
-	Column      TaskRef         `json:"column"`
-	Board       TaskRef         `json:"board"`
-	Project     TaskProjectRef  `json:"project"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	CompletedAt *time.Time      `json:"completedAt"`
-	ArchivedAt  *time.Time      `json:"archivedAt"`
-	IsArchived  bool            `json:"isArchived"`
-	Assignee    *UserResponse   `json:"assignee"`
+	ID              int64          `json:"id"`
+	Title           string         `json:"title"`
+	Priority        *string        `json:"priority"`
+	DueDate         *time.Time     `json:"dueDate"`
+	BorderColor     *string        `json:"borderColor"`
+	ParentID        *int64         `json:"parentId"`
+	ParentTitle     *string        `json:"parentTitle"`
+	Column          TaskRef        `json:"column"`
+	Board           TaskRef        `json:"board"`
+	Project         TaskProjectRef `json:"project"`
+	CreatedAt       time.Time      `json:"createdAt"`
+	CompletedAt     *time.Time     `json:"completedAt"`
+	ArchivedAt      *time.Time     `json:"archivedAt"`
+	IsArchived      bool           `json:"isArchived"`
+	EstimateMinutes *int           `json:"estimateMinutes"`
+	LoggedMinutes   int            `json:"loggedMinutes"`
+	Assignee        *UserResponse  `json:"assignee"`
 }
 
 type TaskListResponse struct {

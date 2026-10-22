@@ -72,6 +72,8 @@ type TaskListParams struct {
 	Kind          string
 	DueFrom       *time.Time
 	DueTo         *time.Time
+	TrackedFrom   *time.Time
+	TrackedTo     *time.Time
 	CreatedFrom   *time.Time
 	CreatedTo     *time.Time
 	CompletedFrom *time.Time
@@ -92,23 +94,24 @@ type TaskCollaborantsParams struct {
 }
 
 type AssignedCardRow struct {
-	ProjectID   int64
-	ProjectName string
-	BoardID     int64
-	BoardTitle  string
-	ColumnID    int64
-	ColumnTitle string
-	CardID      int64
-	CardTitle   string
-	Priority    *string
-	DueDate     *time.Time
-	BorderColor *string
-	ParentID    *int64
-	ParentTitle *string
-	CreatedAt   time.Time
-	CompletedAt *time.Time
-	ArchivedAt  *time.Time
-	IsArchived  bool
+	ProjectID       int64
+	ProjectName     string
+	BoardID         int64
+	BoardTitle      string
+	ColumnID        int64
+	ColumnTitle     string
+	CardID          int64
+	CardTitle       string
+	Priority        *string
+	DueDate         *time.Time
+	BorderColor     *string
+	ParentID        *int64
+	ParentTitle     *string
+	CreatedAt       time.Time
+	CompletedAt     *time.Time
+	ArchivedAt      *time.Time
+	IsArchived      bool
+	EstimateMinutes *int
 }
 
 func NewCardRepository(db *pgxpool.Pool) *CardRepository {
@@ -136,6 +139,7 @@ var taskListColumns = []string{
 	"c.created_at", "c.completed_at",
 	"(" + taskArchivedAtExpr + ")::timestamptz",
 	"(" + taskArchivedExpr + ")::bool",
+	"c.estimate_minutes",
 }
 
 // taskListQuery собирает запрос только из активных фильтров: планировщик видит
@@ -246,6 +250,22 @@ func taskListQuery(f TaskListParams) sq.SelectBuilder {
 		}
 	}
 
+	// tracked_at живёт на записях, не на карточке: задача остаётся, если есть
+	// хотя бы одна живая запись в окне. Удалённые не считаются.
+	if f.TrackedFrom != nil || f.TrackedTo != nil {
+		pred := "w.card_id = c.id AND w.deleted_at IS NULL"
+		args := make([]any, 0, 2)
+		if f.TrackedFrom != nil {
+			pred += " AND w.tracked_at >= ?"
+			args = append(args, *f.TrackedFrom)
+		}
+		if f.TrackedTo != nil {
+			pred += " AND w.tracked_at < ?"
+			args = append(args, *f.TrackedTo)
+		}
+		q = q.Where("EXISTS (SELECT 1 FROM kanban_card_time_wasting w WHERE "+pred+")", args...)
+	}
+
 	return q.OrderBy(taskListOrderBy(f.Sort, f.SortDesc)...)
 }
 
@@ -292,6 +312,7 @@ func (r *CardRepository) queryTaskList(ctx context.Context, q sq.SelectBuilder, 
 		var priority, borderColor, parentTitle pgtype.Text
 		var dueDate, createdAt, completedAt, archivedAt pgtype.Timestamptz
 		var parentID pgtype.Int8
+		var estimate pgtype.Int4
 
 		if err := rows.Scan(
 			&total,
@@ -302,6 +323,7 @@ func (r *CardRepository) queryTaskList(ctx context.Context, q sq.SelectBuilder, 
 			&parentID, &parentTitle,
 			&createdAt, &completedAt,
 			&archivedAt, &row.IsArchived,
+			&estimate,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -314,6 +336,10 @@ func (r *CardRepository) queryTaskList(ctx context.Context, q sq.SelectBuilder, 
 		row.CreatedAt = createdAt.Time
 		row.CompletedAt = timestamptzPtr(completedAt)
 		row.ArchivedAt = timestamptzPtr(archivedAt)
+		if estimate.Valid {
+			minutes := int(estimate.Int32)
+			row.EstimateMinutes = &minutes
+		}
 		result = append(result, row)
 	}
 	if err := rows.Err(); err != nil {

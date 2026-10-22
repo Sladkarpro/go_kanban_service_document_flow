@@ -556,7 +556,28 @@ func (s *CardService) ListTasks(ctx context.Context, f repository.TaskListParams
 	if err := s.attachTaskAssignees(ctx, items); err != nil {
 		return nil, err
 	}
+	if err := s.attachTaskLoggedMinutes(ctx, items); err != nil {
+		return nil, err
+	}
 	return &dto.TaskListResponse{Items: items, Total: total}, nil
+}
+
+func (s *CardService) attachTaskLoggedMinutes(ctx context.Context, items []*dto.TaskListItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(items))
+	for i, item := range items {
+		ids[i] = item.ID
+	}
+	sums, err := s.repo.SumLoggedMinutes(ctx, ids)
+	if err != nil {
+		return err
+	}
+	for _, item := range items {
+		item.LoggedMinutes = sums[item.ID]
+	}
+	return nil
 }
 
 func (s *CardService) attachTaskAssignees(ctx context.Context, items []*dto.TaskListItem) error {

@@ -329,6 +329,10 @@ func parseTaskListQuery(r *http.Request) (repository.TaskListParams, error) {
 	if err != nil {
 		return repository.TaskListParams{}, err
 	}
+	trackedFrom, trackedTo, err := parseDayRange(q.Get("tracked_from"), q.Get("tracked_to"))
+	if err != nil {
+		return repository.TaskListParams{}, err
+	}
 	createdFrom, createdTo, err := parseDayRange(q.Get("created_from"), q.Get("created_to"))
 	if err != nil {
 		return repository.TaskListParams{}, err
@@ -353,6 +357,8 @@ func parseTaskListQuery(r *http.Request) (repository.TaskListParams, error) {
 		Kind:          kind,
 		DueFrom:       dueFrom,
 		DueTo:         dueTo,
+		TrackedFrom:   trackedFrom,
+		TrackedTo:     trackedTo,
 		CreatedFrom:   createdFrom,
 		CreatedTo:     createdTo,
 		CompletedFrom: completedFrom,
