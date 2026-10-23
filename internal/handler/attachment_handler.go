@@ -122,7 +122,11 @@ func (h *AttachmentHandler) DownloadAttachment() http.HandlerFunc {
 
 		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", att.Filename))
 		w.Header().Set("Content-Type", att.ContentType)
-		io.Copy(w, obj)
+		if _, err := io.Copy(w, obj); err != nil {
+			slog.WarnContext(r.Context(), "failed to stream attachment download", "error", err)
+			// A normal return would finish a truncated chunked response successfully.
+			panic(http.ErrAbortHandler)
+		}
 	}
 }
 
@@ -154,7 +158,10 @@ func (h *AttachmentHandler) PreviewAttachment() http.HandlerFunc {
 
 		w.Header().Set("Content-Disposition", "inline")
 		w.Header().Set("Content-Type", att.ContentType)
-		io.Copy(w, obj)
+		if _, err := io.Copy(w, obj); err != nil {
+			slog.WarnContext(r.Context(), "failed to stream attachment preview", "error", err)
+			panic(http.ErrAbortHandler)
+		}
 	}
 }
 
