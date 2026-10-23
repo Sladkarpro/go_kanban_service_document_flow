@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -18,6 +19,8 @@ type CardRepositoryInterface interface {
 	GetCard(ctx context.Context, id int64) (*model.Card, error)
 	GetCardsByBoard(ctx context.Context, boardID int64) ([]model.Card, error)
 	ListTasks(ctx context.Context, f TaskListParams) ([]AssignedCardRow, int64, error)
+	// SumTrackedMinutes — минуты записей в окне tracked_at по всем задачам списка, без LIMIT.
+	SumTrackedMinutes(ctx context.Context, f TaskListParams) (int64, error)
 	ListTaskCollaborants(ctx context.Context, f TaskCollaborantsParams) ([]model.User, int64, error)
 	GetChildCards(ctx context.Context, parentID int64) ([]model.Card, error)
 	GetChildStats(ctx context.Context, parentID int64) (total int64, maxPosition float64, err error)
@@ -152,7 +155,11 @@ var taskListColumns = []string{
 // Владельца в kanban_project_user может не быть (см. GetProjectAssignee),
 // поэтому доступ — «участник или владелец».
 func taskListQuery(f TaskListParams) sq.SelectBuilder {
-	q := sq.Select(taskListColumns...).PlaceholderFormat(sq.Dollar)
+	return taskListSelect(f, taskListColumns).OrderBy(taskListOrderBy(f.Sort, f.SortDesc)...)
+}
+
+func taskListSelect(f TaskListParams, columns []string) sq.SelectBuilder {
+	q := sq.Select(columns...).PlaceholderFormat(sq.Dollar)
 
 	if f.AssigneeID > 0 {
 		// Назначений у человека десятки: COALESCE и OR по ним ничего не стоят.
@@ -266,7 +273,7 @@ func taskListQuery(f TaskListParams) sq.SelectBuilder {
 		q = q.Where("EXISTS (SELECT 1 FROM kanban_card_time_wasting w WHERE "+pred+")", args...)
 	}
 
-	return q.OrderBy(taskListOrderBy(f.Sort, f.SortDesc)...)
+	return q
 }
 
 // taskListOrderBy — белый список: sort выбирает ветку и никогда не попадает
@@ -363,6 +370,38 @@ func (r *CardRepository) ListTasks(ctx context.Context, f TaskListParams) ([]Ass
 		}
 	}
 	return rows, total, nil
+}
+
+func (r *CardRepository) SumTrackedMinutes(ctx context.Context, f TaskListParams) (int64, error) {
+	if f.TrackedFrom == nil && f.TrackedTo == nil {
+		return 0, nil
+	}
+	sqlStr, args, err := trackedMinutesSQL(f)
+	if err != nil {
+		return 0, err
+	}
+	var sum int64
+	err = r.Db.QueryRow(ctx, sqlStr, args...).Scan(&sum)
+	return sum, err
+}
+
+// Сумма по тем же карточкам, что и список, но без сортировки и LIMIT.
+// Даты окна повторяются снаружи: IN отбирает карточки, SUM читает только записи окна.
+func trackedMinutesSQL(f TaskListParams) (string, []any, error) {
+	idSQL, args, err := taskListSelect(f, []string{"c.id"}).ToSql()
+	if err != nil {
+		return "", nil, err
+	}
+	pred := "w.deleted_at IS NULL AND w.card_id IN (" + idSQL + ")"
+	if f.TrackedFrom != nil {
+		args = append(args, *f.TrackedFrom)
+		pred += fmt.Sprintf(" AND w.tracked_at >= $%d", len(args))
+	}
+	if f.TrackedTo != nil {
+		args = append(args, *f.TrackedTo)
+		pred += fmt.Sprintf(" AND w.tracked_at < $%d", len(args))
+	}
+	return "SELECT COALESCE(SUM(w.minutes), 0)::bigint FROM kanban_card_time_wasting w WHERE " + pred, args, nil
 }
 
 func (r *CardRepository) ListTaskCollaborants(ctx context.Context, f TaskCollaborantsParams) ([]model.User, int64, error) {

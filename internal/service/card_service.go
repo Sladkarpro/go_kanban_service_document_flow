@@ -559,7 +559,15 @@ func (s *CardService) ListTasks(ctx context.Context, f repository.TaskListParams
 	if err := s.attachTaskLoggedMinutes(ctx, items); err != nil {
 		return nil, err
 	}
-	return &dto.TaskListResponse{Items: items, Total: total}, nil
+	resp := &dto.TaskListResponse{Items: items, Total: total}
+	if f.TrackedFrom != nil || f.TrackedTo != nil {
+		sum, err := s.repo.SumTrackedMinutes(ctx, f)
+		if err != nil {
+			return nil, err
+		}
+		resp.TrackedMinutes = &sum
+	}
+	return resp, nil
 }
 
 func (s *CardService) attachTaskLoggedMinutes(ctx context.Context, items []*dto.TaskListItem) error {

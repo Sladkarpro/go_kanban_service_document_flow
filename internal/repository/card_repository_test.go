@@ -152,3 +152,39 @@ func TestTaskListQueryTitleSearchIsParameterised(t *testing.T) {
 		t.Errorf("args = %v", args)
 	}
 }
+
+func TestTrackedMinutesSQLSumsWindowWithoutOrder(t *testing.T) {
+	from := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	to := time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC)
+
+	sqlStr, args, err := trackedMinutesSQL(TaskListParams{ViewerID: 7, TrackedFrom: &from})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(sqlStr, "ORDER BY") || strings.Contains(sqlStr, "COUNT(*)") {
+		t.Fatalf("сумма не должна сортировать и считать строки списка:\n%s", sqlStr)
+	}
+	if !strings.Contains(sqlStr, "SELECT COALESCE(SUM(w.minutes), 0)::bigint FROM kanban_card_time_wasting w WHERE w.deleted_at IS NULL AND w.card_id IN (SELECT c.id ") {
+		t.Fatalf("нет суммы по id списка:\n%s", sqlStr)
+	}
+	if !strings.Contains(sqlStr, "w.tracked_at >= $4") {
+		t.Fatalf("внешняя граница окна не $4:\n%s", sqlStr)
+	}
+	if strings.Contains(sqlStr, "w.tracked_at <") {
+		t.Fatalf("верхняя граница не задавалась:\n%s", sqlStr)
+	}
+	if len(args) != 4 || args[3] != from {
+		t.Errorf("args = %v", args)
+	}
+
+	sqlStr, args, err = trackedMinutesSQL(TaskListParams{ViewerID: 7, TrackedFrom: &from, TrackedTo: &to})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sqlStr, "w.tracked_at >= $5") || !strings.Contains(sqlStr, "w.tracked_at < $6") {
+		t.Fatalf("нет обеих внешних границ:\n%s", sqlStr)
+	}
+	if len(args) != 6 || args[4] != from || args[5] != to {
+		t.Errorf("args = %v", args)
+	}
+}

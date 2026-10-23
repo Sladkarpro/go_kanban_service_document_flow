@@ -35,6 +35,8 @@ type TaskListItem struct {
 type TaskListResponse struct {
 	Items []*TaskListItem `json:"items"`
 	Total int64           `json:"total"`
+	// Заполняется только при фильтре tracked_from/tracked_to: минуты записей в этом окне.
+	TrackedMinutes *int64 `json:"trackedMinutes,omitempty"`
 }
 
 type TaskCollaborantsResponse struct {
