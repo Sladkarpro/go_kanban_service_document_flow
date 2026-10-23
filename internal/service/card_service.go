@@ -1181,6 +1181,20 @@ func (s *CardService) mutateCompleteCard(ctx context.Context, id int64) (*dto.Ca
 		EntityLink:  historyTaskPath(acc.ProjectID, acc.BoardID, ownerCardID),
 	})
 
+	// О выполнении — тем же, кому пишем о перемещении. Перенос в колонку «Готово»
+	// ниже идёт мимо MoveCard и своё уведомление не шлёт.
+	if completing && s.notificationSvc != nil {
+		actorID := derefInt64(currentUserID(ctx))
+		notifyCardID := ownerCardID
+		notifyTitle := acc.CardTitle
+		isSubtask := acc.ParentID != nil
+		projectID, boardID, boardTitle := acc.ProjectID, acc.BoardID, acc.BoardTitle
+		runDetached(ctx, notifyTimeout, "failed to notify kanban task completed", func(ctx context.Context) error {
+			s.notificationSvc.NotifyTaskCompleted(ctx, projectID, boardID, boardTitle, notifyCardID, actorID, notifyTitle, isSubtask)
+			return nil
+		})
+	}
+
 	resp := &dto.CardCompletionResponse{
 		ID:            id,
 		Title:         acc.CardTitle,

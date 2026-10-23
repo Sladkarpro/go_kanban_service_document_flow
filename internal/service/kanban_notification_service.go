@@ -211,7 +211,7 @@ func (s *KanbanNotificationService) NotifyTaskAssigned(
 		},
 	}
 
-	notifTitle := fmt.Sprintf("Вам назначена задача: %s", title)
+	notifTitle := fmt.Sprintf("На вас назначена задача «%s» на доске «%s»", title, boardTitle)
 	if isSubtask {
 		notifTitle = fmt.Sprintf("Вам назначена подзадача: %s", title)
 	}
@@ -281,6 +281,74 @@ func (s *KanbanNotificationService) NotifyTaskMoved(
 		fmt.Sprintf("%s переместил(а) задачу %s из колонки «%s» в колонку «%s»",
 			authorName, title, fromColumn, toColumn),
 		"Задача перемещена", link)
+}
+
+// NotifyTaskCompleted сообщает о выполнении тем же, кому пишем о перемещении:
+// исполнители задачи и её подзадач, автор и админы проекта. Кто отметил — без копии.
+// cardID — корневая задача (у подзадачи это родитель), чтобы ссылка открывала её.
+// Автоперенос в колонку «Готово» сюда не входит — о перемещении отдельно не пишем.
+func (s *KanbanNotificationService) NotifyTaskCompleted(
+	ctx context.Context,
+	projectID, boardID int64,
+	boardTitle string,
+	cardID int64,
+	actorID int64,
+	title string,
+	isSubtask bool,
+) {
+	if s.publisher == nil {
+		return
+	}
+
+	involved, err := s.cardRepo.GetInvolvedUserIDsForNotifications(ctx, cardID)
+	if err != nil {
+		slog.Warn("failed to get involved users", "card_id", cardID, "error", err)
+		return
+	}
+
+	admins, err := s.projectMemberRepo.GetAdminUserIDs(ctx, projectID)
+	if err != nil {
+		slog.Warn("failed to get admins", "project_id", projectID, "error", err)
+		return
+	}
+
+	recipients := filterOutActor(uniqueUserIDs(append(involved, admins...)), int64Ptr(actorID))
+	if len(recipients) == 0 {
+		return
+	}
+
+	resolvedBoardID := s.resolveBoardID(ctx, boardID, cardID)
+	if boardTitle == "" {
+		boardTitle = s.getBoardTitle(ctx, resolvedBoardID)
+	}
+	actorName := s.getAuthorName(ctx, actorID)
+	link := projectTaskLink(projectID, resolvedBoardID, cardID)
+
+	noun := "задачу"
+	typeLabel := "Задача выполнена"
+	if isSubtask {
+		noun = "подзадачу"
+		typeLabel = "Подзадача выполнена"
+	}
+
+	evt := events.KanbanNotificationEvent{
+		Type:       "task_completed",
+		ActorID:    actorID,
+		ProjectID:  projectID,
+		BoardID:    int64Ptr(resolvedBoardID),
+		CardID:     &cardID,
+		Recipients: recipients,
+		Data: map[string]any{
+			"taskTitle":  title,
+			"authorName": actorName,
+			"boardTitle": boardTitle,
+			"link":       link,
+		},
+	}
+
+	s.publish(events.RoutingKanbanNotificationTaskCompleted, evt,
+		fmt.Sprintf("%s отметил(а) %s «%s» выполненной", actorName, noun, title),
+		typeLabel, link)
 }
 
 // NotifyCommentAdded notifies relevant users about a new comment.

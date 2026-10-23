@@ -159,6 +159,8 @@ func (h *AttachmentHandler) DownloadAttachment() http.HandlerFunc {
 		w.Header().Set("Content-Type", att.ContentType)
 		if _, err := io.Copy(w, reader); err != nil {
 			slog.WarnContext(r.Context(), "failed to stream attachment download", "error", err)
+			// Обычный return закончил бы обрезанный ответ как успешный.
+			panic(http.ErrAbortHandler)
 		}
 	}
 }
@@ -189,8 +191,10 @@ func (h *AttachmentHandler) PreviewAttachment() http.HandlerFunc {
 		}
 		defer obj.Close()
 
+		// Ошибка здесь только из io.Copy, когда заголовки уже ушли.
 		if err := writeAttachmentPreview(w, obj, att.Filename); err != nil {
 			slog.WarnContext(r.Context(), "failed to stream attachment preview", "error", err)
+			panic(http.ErrAbortHandler)
 		}
 	}
 }
