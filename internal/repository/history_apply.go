@@ -172,6 +172,24 @@ func applyHistoryUndo(ctx context.Context, q *dbgen.Queries, e model.HistoryUndo
 		return q.DeleteAttachment(ctx, e.EntityID)
 	case "attachment.deleted":
 		return q.RestoreAttachment(ctx, e.EntityID)
+	case "card.updated.estimate":
+		minutes, ok := parseUndoEstimate(e.Before)
+		if !ok {
+			return undoImpossible()
+		}
+		_, err := q.SetCardEstimate(ctx, dbgen.SetCardEstimateParams{ID: e.EntityID, EstimateMinutes: minutes})
+		return err
+	case "time_entry.created":
+		n, err := q.SoftDeleteTimeEntry(ctx, e.EntityID)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return undoImpossible()
+		}
+		return nil
+	case "time_entry.deleted":
+		return q.RestoreTimeEntry(ctx, e.EntityID)
 	default:
 		return undoImpossible()
 	}
@@ -324,6 +342,17 @@ func restoreCardAssignee(ctx context.Context, q *dbgen.Queries, projectID, cardI
 		}
 	}
 	return nil
+}
+
+func parseUndoEstimate(s string) (pgtype.Int4, bool) {
+	if s == "" {
+		return pgtype.Int4{}, true
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return pgtype.Int4{}, false
+	}
+	return pgtype.Int4{Int32: int32(n), Valid: true}, true
 }
 
 func parseUndoDue(s string) pgtype.Timestamptz {

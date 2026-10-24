@@ -105,37 +105,39 @@ type CardUserResponse struct {
 }
 
 type CardResponse struct {
-	ID             int64                   `json:"id"`
-	Title          string                  `json:"title"`
-	Description    *string                 `json:"description"`
-	Position       float64                 `json:"position"`
-	DueDate        *time.Time              `json:"dueDate"`
-	Priority       *string                 `json:"priority"`
-	IsArchived     bool                    `json:"isArchived"`
-	ArchivedAt     *time.Time              `json:"archivedAt"`
-	ArchivedByID   *int64                  `json:"archivedById"`
-	CompletedAt    *time.Time              `json:"completedAt"`
-	CompletedByID  *int64                  `json:"completedById"`
-	CompletedBy    *CardUserResponse       `json:"completedBy,omitempty"`
-	ColumnID       *int64                  `json:"columnId"`
-	ParentID       *int64                  `json:"parentId,omitempty"`
-	BoardID        int64                   `json:"boardId"`
-	ColumnTitle    string                  `json:"columnTitle,omitempty"`
-	CreatedByID    *int64                  `json:"createdById"`
-	CreatedBy      *CardUserResponse       `json:"createdBy,omitempty"`
-	BorderColor    *string                 `json:"borderColor"`
-	CreatedAt      time.Time               `json:"createdAt"`
-	UpdatedAt      time.Time               `json:"updatedAt"`
-	AssigneeIDs    []int64                 `json:"assigneeIds,omitempty"`
-	LabelIDs       []int64                 `json:"labelIds,omitempty"`
-	Labels         []*LabelResponse        `json:"labels"`
-	Assignees      []*CardAssigneeResponse `json:"assignees"`
-	Comments       []*CommentResponse      `json:"comments"`
-	Children       []*CardChildResponse    `json:"children"`
-	Attachments    []*AttachmentResponse   `json:"attachments"`
-	ChecklistTotal int                     `json:"checklistTotal"`
-	ChecklistDone  int                     `json:"checklistDone"`
-	CommentsCount  int                     `json:"commentsCount"`
+	ID              int64                   `json:"id"`
+	Title           string                  `json:"title"`
+	Description     *string                 `json:"description"`
+	Position        float64                 `json:"position"`
+	DueDate         *time.Time              `json:"dueDate"`
+	Priority        *string                 `json:"priority"`
+	IsArchived      bool                    `json:"isArchived"`
+	ArchivedAt      *time.Time              `json:"archivedAt"`
+	ArchivedByID    *int64                  `json:"archivedById"`
+	CompletedAt     *time.Time              `json:"completedAt"`
+	CompletedByID   *int64                  `json:"completedById"`
+	CompletedBy     *CardUserResponse       `json:"completedBy,omitempty"`
+	ColumnID        *int64                  `json:"columnId"`
+	ParentID        *int64                  `json:"parentId,omitempty"`
+	BoardID         int64                   `json:"boardId"`
+	ColumnTitle     string                  `json:"columnTitle,omitempty"`
+	CreatedByID     *int64                  `json:"createdById"`
+	CreatedBy       *CardUserResponse       `json:"createdBy,omitempty"`
+	BorderColor     *string                 `json:"borderColor"`
+	CreatedAt       time.Time               `json:"createdAt"`
+	UpdatedAt       time.Time               `json:"updatedAt"`
+	AssigneeIDs     []int64                 `json:"assigneeIds,omitempty"`
+	LabelIDs        []int64                 `json:"labelIds,omitempty"`
+	Labels          []*LabelResponse        `json:"labels"`
+	Assignees       []*CardAssigneeResponse `json:"assignees"`
+	Comments        []*CommentResponse      `json:"comments"`
+	Children        []*CardChildResponse    `json:"children"`
+	Attachments     []*AttachmentResponse   `json:"attachments"`
+	ChecklistTotal  int                     `json:"checklistTotal"`
+	ChecklistDone   int                     `json:"checklistDone"`
+	CommentsCount   int                     `json:"commentsCount"`
+	EstimateMinutes *int                    `json:"estimateMinutes"`
+	LoggedMinutes   int                     `json:"loggedMinutes"`
 	// LastReadCommentID — докуда текущий пользователь дочитал комментарии.
 	LastReadCommentID int64 `json:"lastReadCommentId"`
 }
@@ -242,30 +244,31 @@ func MapCardResponse(c *model.Card) *CardResponse {
 		columnID = &id
 	}
 	return &CardResponse{
-		ID:            c.ID,
-		Title:         c.Title,
-		Description:   c.Description,
-		Position:      c.Position,
-		DueDate:       c.DueDate,
-		Priority:      c.Priority,
-		IsArchived:    c.IsArchived,
-		ArchivedAt:    c.ArchivedAt,
-		ArchivedByID:  c.ArchivedByID,
-		CompletedAt:   c.CompletedAt,
-		CompletedByID: c.CompletedByID,
-		ColumnID:      columnID,
-		ParentID:      c.ParentID,
-		CreatedByID:   c.CreatedByID,
-		BorderColor:   c.BorderColor,
-		CreatedAt:     c.CreatedAt,
-		UpdatedAt:     c.UpdatedAt,
-		AssigneeIDs:   c.AssigneeIDs,
-		LabelIDs:      c.LabelIDs,
-		Labels:        make([]*LabelResponse, 0),
-		Assignees:     make([]*CardAssigneeResponse, 0),
-		Comments:      make([]*CommentResponse, 0),
-		Children:      make([]*CardChildResponse, 0),
-		Attachments:   make([]*AttachmentResponse, 0),
+		ID:              c.ID,
+		Title:           c.Title,
+		Description:     c.Description,
+		Position:        c.Position,
+		DueDate:         c.DueDate,
+		Priority:        c.Priority,
+		IsArchived:      c.IsArchived,
+		ArchivedAt:      c.ArchivedAt,
+		ArchivedByID:    c.ArchivedByID,
+		CompletedAt:     c.CompletedAt,
+		CompletedByID:   c.CompletedByID,
+		ColumnID:        columnID,
+		ParentID:        c.ParentID,
+		CreatedByID:     c.CreatedByID,
+		BorderColor:     c.BorderColor,
+		CreatedAt:       c.CreatedAt,
+		UpdatedAt:       c.UpdatedAt,
+		AssigneeIDs:     c.AssigneeIDs,
+		LabelIDs:        c.LabelIDs,
+		Labels:          make([]*LabelResponse, 0),
+		Assignees:       make([]*CardAssigneeResponse, 0),
+		Comments:        make([]*CommentResponse, 0),
+		Children:        make([]*CardChildResponse, 0),
+		Attachments:     make([]*AttachmentResponse, 0),
+		EstimateMinutes: c.EstimateMinutes,
 	}
 }
 
@@ -279,15 +282,15 @@ type CardStandaloneColumnResponse struct {
 // CardStandaloneResponse — один ответ для панели задачи вне доски:
 // карточка + роль + участники + колонки (без карточек доски).
 type CardStandaloneResponse struct {
-	Card           *CardResponse                    `json:"card"`
-	ProjectID      int64                            `json:"projectId"`
-	MemberRole     string                           `json:"memberRole"`
-	IsOwner        bool                             `json:"isOwner"`
-	IsProjectAdmin bool                             `json:"isProjectAdmin"`
-	DoneColumnID   *int64                           `json:"doneColumnId"`
-	Columns        []*CardStandaloneColumnResponse  `json:"columns"`
-	Members        []*MemberResponse                `json:"members"`
-	Labels         []*LabelResponse                 `json:"labels"`
+	Card           *CardResponse                   `json:"card"`
+	ProjectID      int64                           `json:"projectId"`
+	MemberRole     string                          `json:"memberRole"`
+	IsOwner        bool                            `json:"isOwner"`
+	IsProjectAdmin bool                            `json:"isProjectAdmin"`
+	DoneColumnID   *int64                          `json:"doneColumnId"`
+	Columns        []*CardStandaloneColumnResponse `json:"columns"`
+	Members        []*MemberResponse               `json:"members"`
+	Labels         []*LabelResponse                `json:"labels"`
 }
 
 func MapCardsResponse(cards []model.Card) []*CardResponse {

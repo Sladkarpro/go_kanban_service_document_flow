@@ -20,6 +20,10 @@ func (r *restoredCardRepo) GetCard(_ context.Context, id int64) (*model.Card, er
 	return &model.Card{ID: id, Title: "t", ColumnID: 5, AssigneeIDs: []int64{9}, LabelIDs: []int64{2}}, nil
 }
 
+func (r *restoredCardRepo) SumLoggedMinutes(_ context.Context, ids []int64) (map[int64]int, error) {
+	return map[int64]int{ids[0]: 4}, nil
+}
+
 func (r *restoredCardRepo) GetChildCountsByParentIDs(_ context.Context, ids []int64) (map[int64]model.ChecklistCount, error) {
 	return map[int64]model.ChecklistCount{ids[0]: {Total: 3, Done: 1}}, nil
 }
@@ -79,7 +83,7 @@ func TestBuildRestoredCardReadsCardOnce(t *testing.T) {
 	if assignees := got["assignees"].([]map[string]any); len(assignees) != 1 || assignees[0]["id"] != int64(9) {
 		t.Fatalf("assignees = %v, want user 9", assignees)
 	}
-	if got["checklistTotal"] != 3 || got["checklistDone"] != 1 || got["commentsCount"] != 3 {
-		t.Fatalf("counters = %v/%v/%v, want 3/1/3", got["checklistTotal"], got["checklistDone"], got["commentsCount"])
+	if got["checklistTotal"] != 3 || got["checklistDone"] != 1 || got["commentsCount"] != 3 || got["loggedMinutes"] != 4 {
+		t.Fatalf("counters = %v/%v/%v/%v, want 3/1/3/4", got["checklistTotal"], got["checklistDone"], got["commentsCount"], got["loggedMinutes"])
 	}
 }

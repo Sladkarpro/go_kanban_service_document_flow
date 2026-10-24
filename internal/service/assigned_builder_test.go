@@ -26,20 +26,22 @@ func TestMapTaskListItemsFlatAndParent(t *testing.T) {
 	parentID := int64(555)
 	parentTitle := "Parent"
 	created := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
+	estimate := 480
 
 	got := mapTaskListItems([]repository.AssignedCardRow{
 		{
-			ProjectID:   1,
-			ProjectName: "Project A",
-			BoardID:     10,
-			BoardTitle:  "Board",
-			ColumnID:    100,
-			ColumnTitle: "Todo",
-			CardID:      1000,
-			CardTitle:   "Card 1",
-			Priority:    &priority,
-			DueDate:     &due,
-			CreatedAt:   created,
+			ProjectID:       1,
+			ProjectName:     "Project A",
+			BoardID:         10,
+			BoardTitle:      "Board",
+			ColumnID:        100,
+			ColumnTitle:     "Todo",
+			CardID:          1000,
+			CardTitle:       "Card 1",
+			Priority:        &priority,
+			DueDate:         &due,
+			CreatedAt:       created,
+			EstimateMinutes: &estimate,
 		},
 		{
 			ProjectID:   1,
@@ -67,6 +69,9 @@ func TestMapTaskListItemsFlatAndParent(t *testing.T) {
 	}
 	if got[0].Column.Title != "Todo" || got[0].Project.Name != "Project A" {
 		t.Fatalf("refs = %#v", got[0])
+	}
+	if got[0].EstimateMinutes == nil || *got[0].EstimateMinutes != estimate || got[1].EstimateMinutes != nil {
+		t.Fatalf("estimate = %#v / %#v", got[0].EstimateMinutes, got[1].EstimateMinutes)
 	}
 
 	body, err := json.Marshal(got[0])

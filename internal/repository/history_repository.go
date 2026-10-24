@@ -75,6 +75,7 @@ func (r *HistoryRepository) List(ctx context.Context, projectID, cardID, userID,
 			Action:      row.Action,
 			EntityTitle: row.EntityTitle,
 			EntityLink:  row.EntityLink,
+			EntityID:    row.EntityID,
 			IsChild:     row.IsChild.Valid && row.IsChild.Bool,
 			CreatedAt:   row.CreatedAt.Time.Format(time.RFC3339),
 		}

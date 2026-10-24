@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -18,6 +19,8 @@ type CardRepositoryInterface interface {
 	GetCard(ctx context.Context, id int64) (*model.Card, error)
 	GetCardsByBoard(ctx context.Context, boardID int64) ([]model.Card, error)
 	ListTasks(ctx context.Context, f TaskListParams) ([]AssignedCardRow, int64, error)
+	// SumTrackedMinutes — минуты записей в окне tracked_at по всем задачам списка, без LIMIT.
+	SumTrackedMinutes(ctx context.Context, f TaskListParams) (int64, error)
 	ListTaskCollaborants(ctx context.Context, f TaskCollaborantsParams) ([]model.User, int64, error)
 	GetChildCards(ctx context.Context, parentID int64) ([]model.Card, error)
 	GetChildStats(ctx context.Context, parentID int64) (total int64, maxPosition float64, err error)
@@ -28,6 +31,11 @@ type CardRepositoryInterface interface {
 	GetLabelIDsByCardIDs(ctx context.Context, cardIDs []int64) (map[int64][]int64, error)
 	// GetCardRow — только строка карточки, без исполнителей и меток.
 	GetCardRow(ctx context.Context, id int64) (*model.Card, error)
+	SetCardEstimate(ctx context.Context, id int64, minutes *int) (*model.Card, error)
+	SumLoggedMinutes(ctx context.Context, cardIDs []int64) (map[int64]int, error)
+	CreateTimeEntry(ctx context.Context, cardID, userID int64, minutes int, workAt time.Time) (*model.TimeEntry, error)
+	GetTimeEntry(ctx context.Context, id int64) (*model.TimeEntry, error)
+	DeleteTimeEntry(ctx context.Context, id int64) error
 	// UpdateCardFields пишет только редактируемые поля и отдаёт строку после записи.
 	UpdateCardFields(ctx context.Context, c *model.Card) (*model.Card, error)
 	// SetCardArchived пишет только поля архива и отдаёт заголовок карточки.
@@ -67,6 +75,8 @@ type TaskListParams struct {
 	Kind          string
 	DueFrom       *time.Time
 	DueTo         *time.Time
+	TrackedFrom   *time.Time
+	TrackedTo     *time.Time
 	CreatedFrom   *time.Time
 	CreatedTo     *time.Time
 	CompletedFrom *time.Time
@@ -87,23 +97,24 @@ type TaskCollaborantsParams struct {
 }
 
 type AssignedCardRow struct {
-	ProjectID   int64
-	ProjectName string
-	BoardID     int64
-	BoardTitle  string
-	ColumnID    int64
-	ColumnTitle string
-	CardID      int64
-	CardTitle   string
-	Priority    *string
-	DueDate     *time.Time
-	BorderColor *string
-	ParentID    *int64
-	ParentTitle *string
-	CreatedAt   time.Time
-	CompletedAt *time.Time
-	ArchivedAt  *time.Time
-	IsArchived  bool
+	ProjectID       int64
+	ProjectName     string
+	BoardID         int64
+	BoardTitle      string
+	ColumnID        int64
+	ColumnTitle     string
+	CardID          int64
+	CardTitle       string
+	Priority        *string
+	DueDate         *time.Time
+	BorderColor     *string
+	ParentID        *int64
+	ParentTitle     *string
+	CreatedAt       time.Time
+	CompletedAt     *time.Time
+	ArchivedAt      *time.Time
+	IsArchived      bool
+	EstimateMinutes *int
 }
 
 func NewCardRepository(db *pgxpool.Pool) *CardRepository {
@@ -131,6 +142,7 @@ var taskListColumns = []string{
 	"c.created_at", "c.completed_at",
 	"(" + taskArchivedAtExpr + ")::timestamptz",
 	"(" + taskArchivedExpr + ")::bool",
+	"c.estimate_minutes",
 }
 
 // taskListQuery собирает запрос только из активных фильтров: планировщик видит
@@ -143,7 +155,11 @@ var taskListColumns = []string{
 // Владельца в kanban_project_user может не быть (см. GetProjectAssignee),
 // поэтому доступ — «участник или владелец».
 func taskListQuery(f TaskListParams) sq.SelectBuilder {
-	q := sq.Select(taskListColumns...).PlaceholderFormat(sq.Dollar)
+	return taskListSelect(f, taskListColumns).OrderBy(taskListOrderBy(f.Sort, f.SortDesc)...)
+}
+
+func taskListSelect(f TaskListParams, columns []string) sq.SelectBuilder {
+	q := sq.Select(columns...).PlaceholderFormat(sq.Dollar)
 
 	if f.AssigneeID > 0 {
 		// Назначений у человека десятки: COALESCE и OR по ним ничего не стоят.
@@ -241,7 +257,23 @@ func taskListQuery(f TaskListParams) sq.SelectBuilder {
 		}
 	}
 
-	return q.OrderBy(taskListOrderBy(f.Sort, f.SortDesc)...)
+	// tracked_at живёт на записях, не на карточке: задача остаётся, если есть
+	// хотя бы одна живая запись в окне. Удалённые не считаются.
+	if f.TrackedFrom != nil || f.TrackedTo != nil {
+		pred := "w.card_id = c.id AND w.deleted_at IS NULL"
+		args := make([]any, 0, 2)
+		if f.TrackedFrom != nil {
+			pred += " AND w.tracked_at >= ?"
+			args = append(args, *f.TrackedFrom)
+		}
+		if f.TrackedTo != nil {
+			pred += " AND w.tracked_at < ?"
+			args = append(args, *f.TrackedTo)
+		}
+		q = q.Where("EXISTS (SELECT 1 FROM kanban_card_time_wasting w WHERE "+pred+")", args...)
+	}
+
+	return q
 }
 
 // taskListOrderBy — белый список: sort выбирает ветку и никогда не попадает
@@ -287,6 +319,7 @@ func (r *CardRepository) queryTaskList(ctx context.Context, q sq.SelectBuilder, 
 		var priority, borderColor, parentTitle pgtype.Text
 		var dueDate, createdAt, completedAt, archivedAt pgtype.Timestamptz
 		var parentID pgtype.Int8
+		var estimate pgtype.Int4
 
 		if err := rows.Scan(
 			&total,
@@ -297,6 +330,7 @@ func (r *CardRepository) queryTaskList(ctx context.Context, q sq.SelectBuilder, 
 			&parentID, &parentTitle,
 			&createdAt, &completedAt,
 			&archivedAt, &row.IsArchived,
+			&estimate,
 		); err != nil {
 			return nil, 0, err
 		}
@@ -309,6 +343,10 @@ func (r *CardRepository) queryTaskList(ctx context.Context, q sq.SelectBuilder, 
 		row.CreatedAt = createdAt.Time
 		row.CompletedAt = timestamptzPtr(completedAt)
 		row.ArchivedAt = timestamptzPtr(archivedAt)
+		if estimate.Valid {
+			minutes := int(estimate.Int32)
+			row.EstimateMinutes = &minutes
+		}
 		result = append(result, row)
 	}
 	if err := rows.Err(); err != nil {
@@ -332,6 +370,38 @@ func (r *CardRepository) ListTasks(ctx context.Context, f TaskListParams) ([]Ass
 		}
 	}
 	return rows, total, nil
+}
+
+func (r *CardRepository) SumTrackedMinutes(ctx context.Context, f TaskListParams) (int64, error) {
+	if f.TrackedFrom == nil && f.TrackedTo == nil {
+		return 0, nil
+	}
+	sqlStr, args, err := trackedMinutesSQL(f)
+	if err != nil {
+		return 0, err
+	}
+	var sum int64
+	err = r.Db.QueryRow(ctx, sqlStr, args...).Scan(&sum)
+	return sum, err
+}
+
+// Сумма по тем же карточкам, что и список, но без сортировки и LIMIT.
+// Даты окна повторяются снаружи: IN отбирает карточки, SUM читает только записи окна.
+func trackedMinutesSQL(f TaskListParams) (string, []any, error) {
+	idSQL, args, err := taskListSelect(f, []string{"c.id"}).ToSql()
+	if err != nil {
+		return "", nil, err
+	}
+	pred := "w.deleted_at IS NULL AND w.card_id IN (" + idSQL + ")"
+	if f.TrackedFrom != nil {
+		args = append(args, *f.TrackedFrom)
+		pred += fmt.Sprintf(" AND w.tracked_at >= $%d", len(args))
+	}
+	if f.TrackedTo != nil {
+		args = append(args, *f.TrackedTo)
+		pred += fmt.Sprintf(" AND w.tracked_at < $%d", len(args))
+	}
+	return "SELECT COALESCE(SUM(w.minutes), 0)::bigint FROM kanban_card_time_wasting w WHERE " + pred, args, nil
 }
 
 func (r *CardRepository) ListTaskCollaborants(ctx context.Context, f TaskCollaborantsParams) ([]model.User, int64, error) {
@@ -447,6 +517,10 @@ func mapDBCard(c dbgen.KanbanCard) model.Card {
 	if c.CreatedByID.Valid {
 		v := c.CreatedByID.Int64
 		card.CreatedByID = &v
+	}
+	if c.EstimateMinutes.Valid {
+		v := int(c.EstimateMinutes.Int32)
+		card.EstimateMinutes = &v
 	}
 	return card
 }
@@ -935,4 +1009,76 @@ func (r *CardRepository) GetInvolvedUserIDsForNotifications(ctx context.Context,
 		result = append(result, id)
 	}
 	return result, nil
+}
+
+func (r *CardRepository) SetCardEstimate(ctx context.Context, id int64, minutes *int) (*model.Card, error) {
+	params := dbgen.SetCardEstimateParams{ID: id}
+	if minutes != nil {
+		params.EstimateMinutes = pgtype.Int4{Int32: int32(*minutes), Valid: true}
+	}
+	row, err := dbgen.New(r.Db).SetCardEstimate(ctx, params)
+	if err != nil {
+		return nil, NormalizeError(err)
+	}
+	card := mapDBCard(row)
+	return &card, nil
+}
+
+func (r *CardRepository) SumLoggedMinutes(ctx context.Context, cardIDs []int64) (map[int64]int, error) {
+	out := make(map[int64]int)
+	if len(cardIDs) == 0 {
+		return out, nil
+	}
+	rows, err := dbgen.New(r.Db).SumLoggedMinutesByCardIDs(ctx, cardIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.CardID] = int(row.Minutes)
+	}
+	return out, nil
+}
+
+func mapTimeEntry(row dbgen.KanbanCardTimeWasting) model.TimeEntry {
+	return model.TimeEntry{
+		ID:        row.ID,
+		CardID:    row.CardID,
+		UserID:    row.UserID,
+		Minutes:   int(row.Minutes),
+		TrackedAt: row.TrackedAt.Time,
+	}
+}
+
+func (r *CardRepository) CreateTimeEntry(ctx context.Context, cardID, userID int64, minutes int, workAt time.Time) (*model.TimeEntry, error) {
+	row, err := dbgen.New(r.Db).CreateTimeEntry(ctx, dbgen.CreateTimeEntryParams{
+		CardID:    cardID,
+		UserID:    userID,
+		Minutes:   int32(minutes),
+		TrackedAt: pgtype.Timestamptz{Time: workAt, Valid: true},
+	})
+	if err != nil {
+		return nil, NormalizeError(err)
+	}
+	entry := mapTimeEntry(row)
+	return &entry, nil
+}
+
+func (r *CardRepository) GetTimeEntry(ctx context.Context, id int64) (*model.TimeEntry, error) {
+	row, err := dbgen.New(r.Db).GetTimeEntry(ctx, id)
+	if err != nil {
+		return nil, NormalizeError(err)
+	}
+	entry := mapTimeEntry(row)
+	return &entry, nil
+}
+
+func (r *CardRepository) DeleteTimeEntry(ctx context.Context, id int64) error {
+	n, err := dbgen.New(r.Db).SoftDeleteTimeEntry(ctx, id)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return apperr.ErrNotFound
+	}
+	return nil
 }

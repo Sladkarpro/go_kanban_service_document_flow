@@ -23,8 +23,10 @@ type Card struct {
 	ParentID      *int64     `json:"parent_id,omitempty"`
 	CreatedByID   *int64     `json:"created_by_id,omitempty"`
 	BorderColor   *string    `json:"border_color,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	// EstimateMinutes — план в минутах. Сутки в интерфейсе равны 8 часам.
+	EstimateMinutes *int      `json:"estimate_minutes,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 
 	AssigneeIDs []int64 `json:"assignee_ids,omitempty"`
 	LabelIDs    []int64 `json:"label_ids,omitempty"`
@@ -73,8 +75,8 @@ type ArchivedCard struct {
 	CreatedAt   time.Time
 	ArchivedAt  *time.Time
 	ArchivedBy  *User
-	CompletedAt  *time.Time
-	CompletedBy  *User
+	CompletedAt *time.Time
+	CompletedBy *User
 	Assignees   []User
 }
 

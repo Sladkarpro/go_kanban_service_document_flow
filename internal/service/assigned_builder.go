@@ -10,20 +10,21 @@ func mapTaskListItems(rows []repository.AssignedCardRow) []*dto.TaskListItem {
 	items := make([]*dto.TaskListItem, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, &dto.TaskListItem{
-			ID:          row.CardID,
-			Title:       row.CardTitle,
-			Priority:    row.Priority,
-			DueDate:     row.DueDate,
-			BorderColor: row.BorderColor,
-			ParentID:    row.ParentID,
-			ParentTitle: row.ParentTitle,
-			Column:      dto.TaskRef{ID: row.ColumnID, Title: row.ColumnTitle},
-			Board:       dto.TaskRef{ID: row.BoardID, Title: row.BoardTitle},
-			Project:     dto.TaskProjectRef{ID: row.ProjectID, Name: row.ProjectName},
-			CreatedAt:   row.CreatedAt,
-			CompletedAt: row.CompletedAt,
-			ArchivedAt:  row.ArchivedAt,
-			IsArchived:  row.IsArchived,
+			ID:              row.CardID,
+			Title:           row.CardTitle,
+			Priority:        row.Priority,
+			DueDate:         row.DueDate,
+			BorderColor:     row.BorderColor,
+			ParentID:        row.ParentID,
+			ParentTitle:     row.ParentTitle,
+			Column:          dto.TaskRef{ID: row.ColumnID, Title: row.ColumnTitle},
+			Board:           dto.TaskRef{ID: row.BoardID, Title: row.BoardTitle},
+			Project:         dto.TaskProjectRef{ID: row.ProjectID, Name: row.ProjectName},
+			CreatedAt:       row.CreatedAt,
+			CompletedAt:     row.CompletedAt,
+			ArchivedAt:      row.ArchivedAt,
+			IsArchived:      row.IsArchived,
+			EstimateMinutes: row.EstimateMinutes,
 		})
 	}
 	return items

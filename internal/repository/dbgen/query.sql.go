@@ -228,7 +228,7 @@ func (q *Queries) CreateBoard(ctx context.Context, arg CreateBoardParams) (Kanba
 const createCard = `-- name: CreateCard :one
 INSERT INTO kanban_card (title, description, position, due_date, priority, column_id, parent_id, created_by_id, border_color)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id
+RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes
 `
 
 type CreateCardParams struct {
@@ -275,6 +275,7 @@ func (q *Queries) CreateCard(ctx context.Context, arg CreateCardParams) (KanbanC
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.ParentID,
+		&i.EstimateMinutes,
 	)
 	return i, err
 }
@@ -477,6 +478,39 @@ func (q *Queries) CreateProjectHistoryEntry(ctx context.Context, arg CreateProje
 	return i, err
 }
 
+const createTimeEntry = `-- name: CreateTimeEntry :one
+INSERT INTO kanban_card_time_wasting (card_id, user_id, minutes, tracked_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id, card_id, user_id, minutes, tracked_at, created_at, deleted_at
+`
+
+type CreateTimeEntryParams struct {
+	CardID    int64              `json:"card_id"`
+	UserID    int64              `json:"user_id"`
+	Minutes   int32              `json:"minutes"`
+	TrackedAt pgtype.Timestamptz `json:"tracked_at"`
+}
+
+func (q *Queries) CreateTimeEntry(ctx context.Context, arg CreateTimeEntryParams) (KanbanCardTimeWasting, error) {
+	row := q.db.QueryRow(ctx, createTimeEntry,
+		arg.CardID,
+		arg.UserID,
+		arg.Minutes,
+		arg.TrackedAt,
+	)
+	var i KanbanCardTimeWasting
+	err := row.Scan(
+		&i.ID,
+		&i.CardID,
+		&i.UserID,
+		&i.Minutes,
+		&i.TrackedAt,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const deleteAttachment = `-- name: DeleteAttachment :exec
 UPDATE kanban_attachment
 SET deleted_at = CURRENT_TIMESTAMP
@@ -632,22 +666,22 @@ func (q *Queries) DeleteRemovedMembersAssignees(ctx context.Context, arg DeleteR
 
 const duplicateCard = `-- name: DuplicateCard :many
 WITH copy AS (
-    INSERT INTO kanban_card (title, description, position, due_date, priority, column_id, created_by_id, border_color)
+    INSERT INTO kanban_card (title, description, position, due_date, priority, column_id, created_by_id, border_color, estimate_minutes)
     SELECT title, description, $1::float8, due_date, priority,
-           $2::bigint, $3::bigint, border_color
+           $2::bigint, $3::bigint, border_color, estimate_minutes
     FROM kanban_card
     WHERE id = $4::bigint AND deleted_at IS NULL
-    RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id
+    RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes
 ), children AS (
     INSERT INTO kanban_card (title, position, parent_id, created_by_id)
     SELECT src.title, src.position, copy.id, $3::bigint
     FROM kanban_card src CROSS JOIN copy
     WHERE src.parent_id = $4::bigint AND src.deleted_at IS NULL
-    RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id
+    RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes
 )
-SELECT id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id FROM copy
+SELECT id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes FROM copy
 UNION ALL
-SELECT id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id FROM children
+SELECT id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes FROM children
 ORDER BY parent_id NULLS FIRST, position
 `
 
@@ -659,24 +693,25 @@ type DuplicateCardParams struct {
 }
 
 type DuplicateCardRow struct {
-	ID            int64              `json:"id"`
-	Title         string             `json:"title"`
-	Description   pgtype.Text        `json:"description"`
-	Position      float64            `json:"position"`
-	DueDate       pgtype.Timestamptz `json:"due_date"`
-	Priority      pgtype.Text        `json:"priority"`
-	IsArchived    bool               `json:"is_archived"`
-	ArchivedAt    pgtype.Timestamptz `json:"archived_at"`
-	ArchivedByID  pgtype.Int8        `json:"archived_by_id"`
-	CompletedAt   pgtype.Timestamptz `json:"completed_at"`
-	CompletedByID pgtype.Int8        `json:"completed_by_id"`
-	ColumnID      pgtype.Int8        `json:"column_id"`
-	CreatedByID   pgtype.Int8        `json:"created_by_id"`
-	BorderColor   pgtype.Text        `json:"border_color"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
-	ParentID      pgtype.Int8        `json:"parent_id"`
+	ID              int64              `json:"id"`
+	Title           string             `json:"title"`
+	Description     pgtype.Text        `json:"description"`
+	Position        float64            `json:"position"`
+	DueDate         pgtype.Timestamptz `json:"due_date"`
+	Priority        pgtype.Text        `json:"priority"`
+	IsArchived      bool               `json:"is_archived"`
+	ArchivedAt      pgtype.Timestamptz `json:"archived_at"`
+	ArchivedByID    pgtype.Int8        `json:"archived_by_id"`
+	CompletedAt     pgtype.Timestamptz `json:"completed_at"`
+	CompletedByID   pgtype.Int8        `json:"completed_by_id"`
+	ColumnID        pgtype.Int8        `json:"column_id"`
+	CreatedByID     pgtype.Int8        `json:"created_by_id"`
+	BorderColor     pgtype.Text        `json:"border_color"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	ParentID        pgtype.Int8        `json:"parent_id"`
+	EstimateMinutes pgtype.Int4        `json:"estimate_minutes"`
 }
 
 // Копия карточки с подзадачами одним оператором — он атомарен сам по себе.
@@ -717,6 +752,7 @@ func (q *Queries) DuplicateCard(ctx context.Context, arg DuplicateCardParams) ([
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.ParentID,
+			&i.EstimateMinutes,
 		); err != nil {
 			return nil, err
 		}
@@ -896,7 +932,7 @@ func (q *Queries) GetBoardsByProject(ctx context.Context, kanbanProjectID int64)
 
 const getCard = `-- name: GetCard :one
 
-SELECT id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id FROM kanban_card
+SELECT id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes FROM kanban_card
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -925,6 +961,7 @@ func (q *Queries) GetCard(ctx context.Context, id int64) (KanbanCard, error) {
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.ParentID,
+		&i.EstimateMinutes,
 	)
 	return i, err
 }
@@ -1164,7 +1201,7 @@ func (q *Queries) GetCardReadMark(ctx context.Context, arg GetCardReadMarkParams
 }
 
 const getCardsByBoard = `-- name: GetCardsByBoard :many
-SELECT c.id, c.title, c.description, c.position, c.due_date, c.priority, c.is_archived, c.archived_at, c.archived_by_id, c.completed_at, c.completed_by_id, c.column_id, c.created_by_id, c.border_color, c.created_at, c.updated_at, c.deleted_at, c.parent_id FROM kanban_card c
+SELECT c.id, c.title, c.description, c.position, c.due_date, c.priority, c.is_archived, c.archived_at, c.archived_by_id, c.completed_at, c.completed_by_id, c.column_id, c.created_by_id, c.border_color, c.created_at, c.updated_at, c.deleted_at, c.parent_id, c.estimate_minutes FROM kanban_card c
 JOIN kanban_column col ON col.id = c.column_id
 WHERE col.board_id = $1 AND c.parent_id IS NULL AND c.is_archived = FALSE AND c.deleted_at IS NULL AND col.deleted_at IS NULL
 ORDER BY col.position ASC, c.position ASC
@@ -1198,6 +1235,7 @@ func (q *Queries) GetCardsByBoard(ctx context.Context, boardID int64) ([]KanbanC
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.ParentID,
+			&i.EstimateMinutes,
 		); err != nil {
 			return nil, err
 		}
@@ -1242,7 +1280,7 @@ func (q *Queries) GetChatAttachmentCountsByCardIDs(ctx context.Context, dollar_1
 }
 
 const getChildCards = `-- name: GetChildCards :many
-SELECT id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id FROM kanban_card
+SELECT id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes FROM kanban_card
 WHERE parent_id = $1 AND deleted_at IS NULL
 ORDER BY position ASC
 `
@@ -1275,6 +1313,7 @@ func (q *Queries) GetChildCards(ctx context.Context, parentID pgtype.Int8) ([]Ka
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.ParentID,
+			&i.EstimateMinutes,
 		); err != nil {
 			return nil, err
 		}
@@ -1918,6 +1957,26 @@ func (q *Queries) GetProjectMembers(ctx context.Context, kanbanProjectID int64) 
 	return items, nil
 }
 
+const getTimeEntry = `-- name: GetTimeEntry :one
+SELECT id, card_id, user_id, minutes, tracked_at, created_at, deleted_at FROM kanban_card_time_wasting
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetTimeEntry(ctx context.Context, id int64) (KanbanCardTimeWasting, error) {
+	row := q.db.QueryRow(ctx, getTimeEntry, id)
+	var i KanbanCardTimeWasting
+	err := row.Scan(
+		&i.ID,
+		&i.CardID,
+		&i.UserID,
+		&i.Minutes,
+		&i.TrackedAt,
+		&i.CreatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const hasCardsByColumn = `-- name: HasCardsByColumn :one
 SELECT EXISTS(
     SELECT 1 FROM kanban_card
@@ -2036,6 +2095,7 @@ SELECT
     j.id,
     j.project_id,
     j.user_id,
+    j.entity_id,
     j.action,
     j.entity_title,
     j.entity_link,
@@ -2069,6 +2129,7 @@ type ListProjectHistoryRow struct {
 	ID          int64              `json:"id"`
 	ProjectID   int64              `json:"project_id"`
 	UserID      pgtype.Int8        `json:"user_id"`
+	EntityID    int64              `json:"entity_id"`
 	Action      string             `json:"action"`
 	EntityTitle string             `json:"entity_title"`
 	EntityLink  string             `json:"entity_link"`
@@ -2100,6 +2161,7 @@ func (q *Queries) ListProjectHistory(ctx context.Context, arg ListProjectHistory
 			&i.ID,
 			&i.ProjectID,
 			&i.UserID,
+			&i.EntityID,
 			&i.Action,
 			&i.EntityTitle,
 			&i.EntityLink,
@@ -2478,6 +2540,17 @@ func (q *Queries) RestoreProject(ctx context.Context, id int64) error {
 	return err
 }
 
+const restoreTimeEntry = `-- name: RestoreTimeEntry :exec
+UPDATE kanban_card_time_wasting
+SET deleted_at = NULL
+WHERE id = $1
+`
+
+func (q *Queries) RestoreTimeEntry(ctx context.Context, id int64) error {
+	_, err := q.db.Exec(ctx, restoreTimeEntry, id)
+	return err
+}
+
 const setCardArchived = `-- name: SetCardArchived :one
 UPDATE kanban_card
 SET is_archived = $2, archived_at = $3, archived_by_id = $4, updated_at = CURRENT_TIMESTAMP
@@ -2529,6 +2602,45 @@ func (q *Queries) SetCardCompleted(ctx context.Context, arg SetCardCompletedPara
 	return updated_at, err
 }
 
+const setCardEstimate = `-- name: SetCardEstimate :one
+UPDATE kanban_card
+SET estimate_minutes = $2, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes
+`
+
+type SetCardEstimateParams struct {
+	ID              int64       `json:"id"`
+	EstimateMinutes pgtype.Int4 `json:"estimate_minutes"`
+}
+
+func (q *Queries) SetCardEstimate(ctx context.Context, arg SetCardEstimateParams) (KanbanCard, error) {
+	row := q.db.QueryRow(ctx, setCardEstimate, arg.ID, arg.EstimateMinutes)
+	var i KanbanCard
+	err := row.Scan(
+		&i.ID,
+		&i.Title,
+		&i.Description,
+		&i.Position,
+		&i.DueDate,
+		&i.Priority,
+		&i.IsArchived,
+		&i.ArchivedAt,
+		&i.ArchivedByID,
+		&i.CompletedAt,
+		&i.CompletedByID,
+		&i.ColumnID,
+		&i.CreatedByID,
+		&i.BorderColor,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ParentID,
+		&i.EstimateMinutes,
+	)
+	return i, err
+}
+
 const setDoneColumnID = `-- name: SetDoneColumnID :exec
 UPDATE kanban_board
 SET done_column_id = $1, updated_at = CURRENT_TIMESTAMP
@@ -2543,6 +2655,52 @@ type SetDoneColumnIDParams struct {
 func (q *Queries) SetDoneColumnID(ctx context.Context, arg SetDoneColumnIDParams) error {
 	_, err := q.db.Exec(ctx, setDoneColumnID, arg.DoneColumnID, arg.ID)
 	return err
+}
+
+const softDeleteTimeEntry = `-- name: SoftDeleteTimeEntry :execrows
+UPDATE kanban_card_time_wasting
+SET deleted_at = NOW()
+WHERE id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) SoftDeleteTimeEntry(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, softDeleteTimeEntry, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sumLoggedMinutesByCardIDs = `-- name: SumLoggedMinutesByCardIDs :many
+SELECT card_id, COALESCE(SUM(minutes), 0)::int AS minutes
+FROM kanban_card_time_wasting
+WHERE card_id = ANY($1::bigint[]) AND deleted_at IS NULL
+GROUP BY card_id
+`
+
+type SumLoggedMinutesByCardIDsRow struct {
+	CardID  int64 `json:"card_id"`
+	Minutes int32 `json:"minutes"`
+}
+
+func (q *Queries) SumLoggedMinutesByCardIDs(ctx context.Context, dollar_1 []int64) ([]SumLoggedMinutesByCardIDsRow, error) {
+	rows, err := q.db.Query(ctx, sumLoggedMinutesByCardIDs, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumLoggedMinutesByCardIDsRow{}
+	for rows.Next() {
+		var i SumLoggedMinutesByCardIDsRow
+		if err := rows.Scan(&i.CardID, &i.Minutes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateBoard = `-- name: UpdateBoard :one
@@ -2579,7 +2737,7 @@ const updateCard = `-- name: UpdateCard :one
 UPDATE kanban_card
 SET title = $1, description = $2, position = $3, due_date = $4, priority = $5, is_archived = $6, archived_at = $7, archived_by_id = $8, completed_at = $9, completed_by_id = $10, column_id = $11, parent_id = $12, border_color = $13, updated_at = CURRENT_TIMESTAMP
 WHERE id = $14
-RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id
+RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes
 `
 
 type UpdateCardParams struct {
@@ -2636,6 +2794,7 @@ func (q *Queries) UpdateCard(ctx context.Context, arg UpdateCardParams) (KanbanC
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.ParentID,
+		&i.EstimateMinutes,
 	)
 	return i, err
 }
@@ -2644,7 +2803,7 @@ const updateCardFields = `-- name: UpdateCardFields :one
 UPDATE kanban_card
 SET title = $2, description = $3, due_date = $4, priority = $5, border_color = $6, updated_at = CURRENT_TIMESTAMP
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id
+RETURNING id, title, description, position, due_date, priority, is_archived, archived_at, archived_by_id, completed_at, completed_by_id, column_id, created_by_id, border_color, created_at, updated_at, deleted_at, parent_id, estimate_minutes
 `
 
 type UpdateCardFieldsParams struct {
@@ -2688,6 +2847,7 @@ func (q *Queries) UpdateCardFields(ctx context.Context, arg UpdateCardFieldsPara
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.ParentID,
+		&i.EstimateMinutes,
 	)
 	return i, err
 }
